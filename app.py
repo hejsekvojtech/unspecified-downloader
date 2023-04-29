@@ -5,10 +5,11 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver import ActionChains
 from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import WebDriverException
 
 import os, time, glob
 
-filename = "songlist.txt"
+songlist = "songlist.txt"
 skipped = open('skipped.txt', 'w')
 download_dir = os.path.join(os.path.expanduser("~"), "Downloads")
 
@@ -25,12 +26,12 @@ def getublock():
 	time.sleep(10)
 	driver.close()
 
-def dl_click():
+def downloadClick():
 	dl_button = driver.find_element(By.XPATH, "//button[text()='Download']")
 	driver.implicitly_wait(1.5)
 	dl_button.click()
 
-def quality_click():
+def selectQuality():
 	driver.implicitly_wait(1.5)
 	if quality == "1":
 		ActionChains(driver).move_to_element(driver.find_element(By.ID, "mp3-128")).click().perform()
@@ -39,11 +40,7 @@ def quality_click():
 	elif quality == "3":
 		ActionChains(driver).move_to_element(driver.find_element(By.ID, "flac")).click().perform()
 
-def is_file_downloading(filename):
-	while not os.path.exists(filename):
-		time.sleep(1)
-
-def check_by_xpath(xpath):
+def xpathExists(xpath):
 	try:
 		driver.find_element(By.XPATH, xpath)
 	except NoSuchElementException:
@@ -51,19 +48,12 @@ def check_by_xpath(xpath):
 	return True
 
 def download():
-	c = 0
-
-	if quality == "3":
-		ext = "flac"
-	else:
-		ext = "mp3"
-
-	with open(filename, encoding='utf-8') as fp:
+	with open(songlist, encoding='utf-8') as fp:
+		c = 1
 		Lines = fp.readlines()
 		for line in Lines:
 			if line.strip() != '':
-				c += 1
-				time.sleep(2)
+				time.sleep(1)
 				driver.find_element(By.CLASS_NAME, 'input').clear()
 				time.sleep(1)
 				search_box = driver.find_element(By.CLASS_NAME, "input")
@@ -74,42 +64,43 @@ def download():
 				search_button.click()
 				time.sleep(2)
 
-				if check_by_xpath("//span[text()='No results found.']"):
-					print("Skipping " + line)
+				if xpathExists("//span[text()='No results found.']"):
+					print("Přeskakuji " + line.strip())
 					skipped.write(line)
 					continue
 
-				dl_click()
-
-				songname = driver.find_element(By.ID, "song-title").text.split(": ")[1].replace("/", "-")
-
-				print("Stahuji " + songname)
+				downloadClick()
+				selectQuality()
 				if c == 1:
-					quality_click()
 					driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-					time.sleep(10)
-					dl_click()
-					c += 1
 				else:
-					quality_click()
-					dl_click()
-					c += 1
+					downloadClick()
+				c += 1
 
-				fileends = "none"
-				while "none" == fileends:
+				print("Stahuji " + line.strip())
+				downloadStarted = False
+				while not downloadStarted:
 					time.sleep(0.5)
 					for fname in os.listdir(download_dir):
-						if "crdownload" in fname:
-							fileends = "crdownload"
+						if ".crdownload" in fname:
+							downloadStarted = True
 
 				driver.execute_script("window.history.go(-1)")
 				time.sleep(1)
 
+		while True:
+			downloadFinished = True
+			for fname in os.listdir(download_dir):
+				if ".crdownload" in fname:
+					downloadFinished = False;
+			if downloadFinished:
+				print("Hotovo!")
+				sys.exit(0)
+			time.sleep(1)
 
-def start_script():
+def setupPage():
 	driver.get("")
-	vpn_check = driver.find_element(By.XPATH, ".//*[contains(text(), 'Search using our VPN')]")
-	vpn_check.click()
+	driver.find_element(By.XPATH, ".//*[contains(text(), 'Search using our VPN')]").click()
 	driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 	download()
 	time.sleep(60)
@@ -126,14 +117,14 @@ if __name__ == "__main__":
 		try:
 			int(quality)
 		except:
-			sys.exit()
+			sys.exit(1)
 		
 		options = webdriver.ChromeOptions()
 		options.add_extension(adb)
 		options.add_argument('--lang=en')
 		s = Service(ChromeDriverManager().install())
 		driver = webdriver.Chrome(service=s, options=options)
-		start_script()
+		setupPage()
 		skipped.close()
 	else:
 		getublock()
